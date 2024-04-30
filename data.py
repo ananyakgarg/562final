@@ -3,353 +3,316 @@ import p_rank
 import pandas as pd
 
 
-def getParameter(param):
-    def f(data, index):
+def get_parameter(param):
+    def extract(data, index):
         return data[param][index]
-    return f
+    return extract
 
-class MakeData:
+class DataBuilder:
     def __init__(self):
-        self.year_to_teamid_to_leagueid = {}
-        self.teamid_to_teamname = {}
-        self.year_to_league_stats = {}
-        self.year_to_stats = {}
+        self.year_to_team_to_league = {}
+        self.team_id_to_name = {}
+        self.league_stats_by_year = {}
+        self.stats_by_year = {}
 
-        self.readTeamIdToTeamName()
-        self.readTeamIdToLeagueId()
-        self.createYearToLeagueStats()
+        self.load_team_names()
+        self.load_team_leagues()
+        self.initialize_league_stats()
 
-    def readTeamIdToTeamName(self, fileName='MDataFiles_Stage3/MTeams.csv',
-                             teamId='TeamID', teamName='TeamName'):
-        data = pd.read_csv('MDataFiles_Stage3/MTeams.csv')
-        for i in range(len(data[teamId])):
-            if data[teamId][i] not in self.teamid_to_teamname:
-                self.teamid_to_teamname[data[teamId][i]] = data[teamName][i]
+    def load_team_names(self, file_name='MDataFiles_Stage3/MTeams.csv',
+                        team_id='TeamID', team_name='TeamName'):
+        data = pd.read_csv(file_name)
+        for i in range(len(data[team_id])):
+            if data[team_id][i] not in self.team_id_to_name:
+                self.team_id_to_name[data[team_id][i]] = data[team_name][i]
 
-    def readTeamIdToLeagueId(self, fileName='MDataFiles_Stage3/MTeams.csv',
-                             teamId='TeamID', year='Season', league='ConfAbbrev'):
+    def load_team_leagues(self, file_name='MDataFiles_Stage3/MTeams.csv',
+                          team_id='TeamID', year='Season', league='ConfAbbrev'):
         data = pd.read_csv('MDataFiles_Stage3/MTeamConferences.csv')
-        for i in range(len(data[teamId])):
-            if data[year][i] not in self.year_to_teamid_to_leagueid:
-                self.year_to_teamid_to_leagueid[data[year][i]] = {}
+        for i in range(len(data[team_id])):
+            if data[year][i] not in self.year_to_team_to_league:
+                self.year_to_team_to_league[data[year][i]] = {}
+            self.year_to_team_to_league[data[year][i]][data[team_id][i]] = data[league][i]
 
-            self.year_to_teamid_to_leagueid[
-                data[year][i]][data[teamId][i]] = data[league][i]
-
-    def createYearToLeagueStats(self):
-        for year in self.year_to_teamid_to_leagueid:
-            self.year_to_league_stats[year] = {}
-            self.year_to_stats[year] = {}
-            for teamId in self.year_to_teamid_to_leagueid[year]:
-                leagueId = self.year_to_teamid_to_leagueid[year][teamId]
-
-                if leagueId not in self.year_to_league_stats[year]:
-                    self.year_to_league_stats[year][leagueId] = {
-                        'indexToTeam': [],
-                        'teamToIndex': {},
-                        'index': len(self.year_to_league_stats[year])
+    def initialize_league_stats(self):
+        for year in self.year_to_team_to_league:
+            self.league_stats_by_year[year] = {}
+            self.stats_by_year[year] = {}
+            for team_id in self.year_to_team_to_league[year]:
+                league_id = self.year_to_team_to_league[year][team_id]
+                if league_id not in self.league_stats_by_year[year]:
+                    self.league_stats_by_year[year][league_id] = {
+                        'team_to_index': {},
+                        'index_to_team': [],
+                        'index': len(self.league_stats_by_year[year])
                     }
+                index = len(self.league_stats_by_year[year][league_id]['index_to_team'])
+                self.league_stats_by_year[year][league_id]['team_to_index'][team_id] = index
+                self.league_stats_by_year[year][league_id]['index_to_team'].append(team_id)
 
-                self.year_to_league_stats[year][leagueId]['teamToIndex'][teamId] = len(
-                    self.year_to_league_stats[year][leagueId]['indexToTeam'])
-                self.year_to_league_stats[year][leagueId]['indexToTeam'].append(teamId)
+    def prepare_data(self, data, setup_funcs, update_funcs, input_funcs, get_year=get_parameter("Season"),
+                     get_winner_id=get_parameter("WTeamID"), get_winner_score=get_parameter("WScore"),
+                     get_loser_id=get_parameter("LTeamID"), get_loser_score=get_parameter("LScore")):
 
-    def createInputsAndOutputs(self, data, setupFuncs, createDataFuncs,
-                               collectInputFuncs, getYear=getParameter("Season"),
-                               getWTeamId=getParameter("WTeamID"), getWScore=getParameter("WScore"),
-                               getLTeamId=getParameter("LTeamID"), getLScore=getParameter("LScore")):
+        for func in setup_funcs:
+            func(self)
 
-        for f in setupFuncs:
-            f(self)
-
-        inputs = []
-        outputs = []
+        inputs, outputs = [], []
         for i in range(len(data)):
-
             if i > 1000 and i % 5000 == 0:
-                print(i, '/', len(data), i / len(data))
+                print(f"{i} / {len(data)} {i / len(data):.2f}")
 
-            season = getYear(data, i)
-            # if season < 2015:
-            #    continue
-            wId = getWTeamId(data, i)
-            wScore = getWScore(data, i)
-            lId = getLTeamId(data, i)
-            lScore = getLScore(data, i)
+            season = get_year(data, i)
+            winner_id = get_winner_id(data, i)
+            winner_score = get_winner_score(data, i)
+            loser_id = get_loser_id(data, i)
+            loser_score = get_loser_score(data, i)
 
-            wLeagueId = self.year_to_teamid_to_leagueid[season][wId]
-            lLeagueId = self.year_to_teamid_to_leagueid[season][lId]
+            winner_league_id = self.year_to_team_to_league[season][winner_id]
+            loser_league_id = self.year_to_team_to_league[season][loser_id]
 
-            wLeagueIndex = self.year_to_league_stats[season][wLeagueId]['index']
-            lLeagueIndex = self.year_to_league_stats[season][lLeagueId]['index']
+            winner_league_index = self.league_stats_by_year[season][winner_league_id]['index']
+            loser_league_index = self.league_stats_by_year[season][loser_league_id]['index']
 
-            wIndex = self.year_to_league_stats[season][wLeagueId]['teamToIndex'][wId]
-            lIndex = self.year_to_league_stats[season][lLeagueId]['teamToIndex'][lId]
+            winner_index = self.league_stats_by_year[season][winner_league_id]['team_to_index'][winner_id]
+            loser_index = self.league_stats_by_year[season][loser_league_id]['team_to_index'][loser_id]
 
-            # Collect Data To Inputs
-            for i in range(2):
-                new_input = []
-                new_output = [1 if i == 0 else 0]
-                for f in collectInputFuncs:
-                    f(self, new_input, season,
-                      wLeagueId, wLeagueIndex, wIndex, wScore,
-                      lLeagueId, lLeagueIndex, lIndex, lScore)
+            for j in range(2):  # Create inputs for both outcomes
+                new_input, new_output = [], [1 if j == 0 else 0]
+                for func in input_funcs:
+                    func(self, new_input, season,
+                         winner_league_id, winner_league_index, winner_index, winner_score,
+                         loser_league_id, loser_league_index, loser_index, loser_score)
 
                 inputs.append(new_input)
                 outputs.append(new_output)
 
-                rLeagueId, rLeagueIndex, rIndex, rScore = (lLeagueId, lLeagueIndex, lIndex, lScore)
-                lLeagueId, lLeagueIndex, lIndex, lScore = (wLeagueId, wLeagueIndex, wIndex, wScore)
-                wLeagueId, wLeagueIndex, wIndex, wScore = (rLeagueId, rLeagueIndex, rIndex, rScore)
+                # Swap winner and loser for second outcome
+                winner_league_id, winner_league_index, winner_index, winner_score, loser_league_id, loser_league_index, loser_index, loser_score = (
+                loser_league_id, loser_league_index, loser_index, loser_score, winner_league_id, winner_league_index, winner_index, winner_score)
 
-            # Add the game to data for future inputs
-            for f in createDataFuncs:
-                f(self, new_input, season,
-                  wLeagueId, wLeagueIndex, wIndex, wScore,
-                  lLeagueId, lLeagueIndex, lIndex, lScore)
+            # Update stats for future inputs
+            for func in update_funcs:
+                func(self, new_input, season,
+                     winner_league_id, winner_league_index, winner_index, winner_score,
+                     loser_league_id, loser_league_index, loser_index, loser_score)
 
         return inputs, outputs
 
+def setup_page_rank(name):
+    def initialize(self):
+        for year in self.year_to_team_to_league:
+            league_count = len(self.league_stats_by_year[year])
+            self.stats_by_year[year][name] = [
+                [0.0 for _ in range(league_count)] for _ in range(league_count)]
+            for team_id in self.year_to_team_to_league[year]:
+                league_id = self.year_to_team_to_league[year][team_id]
+                team_count = len(
+                    self.league_stats_by_year[year][league_id]['index_to_team'])
+                self.league_stats_by_year[year][league_id][name] = [
+                    [0.0 for _ in range(team_count)] for _ in range(team_count)]
+    return initialize
 
-# MARK: Team Page Rank
+def update_page_rank(name, wins_multiplier, goals_multiplier):
+    def apply_update(self, new_input, season,
+                     winner_league_id, winner_league_index, winner_index, winner_score,
+                     loser_league_id, loser_league_index, loser_index, loser_score):
 
-def setUpPageRank(name):
-    def f(self):
-        for year in self.year_to_teamid_to_leagueid:
-            teamCount = len(self.year_to_league_stats[year])
-            self.year_to_stats[year][name] = [
-                [0.0 for i in range(teamCount)] for j in range(teamCount)]
-            for teamId in self.year_to_teamid_to_leagueid[year]:
-                leagueId = self.year_to_teamid_to_leagueid[year][teamId]
-                teamCount = len(
-                    self.year_to_league_stats[year][leagueId]['indexToTeam'])
-                self.year_to_league_stats[year][leagueId][name] = [
-                    [0.0 for i in range(teamCount)] for j in range(teamCount)]
-
-    return f
-
-
-def updatePageRank(name, winsMultiplier, goalsMultiplier):
-    def f(self, new_input, season,
-          wLeagueId, wLeagueIndex, wIndex, wScore,
-          lLeagueId, lLeagueIndex, lIndex, lScore):
-
-        if wLeagueId == lLeagueId:
-            self.year_to_league_stats[season][wLeagueId][name][lIndex][wIndex] += winsMultiplier
-            self.year_to_league_stats[season][wLeagueId][name][lIndex][wIndex] += wScore * goalsMultiplier
-            self.year_to_league_stats[season][wLeagueId][name][wIndex][lIndex] += lScore * goalsMultiplier
+        if winner_league_id == loser_league_id:
+            self.league_stats_by_year[season][winner_league_id][name][loser_index][winner_index] += wins_multiplier
+            self.league_stats_by_year[season][winner_league_id][name][loser_index][winner_index] += winner_score * goals_multiplier
+            self.league_stats_by_year[season][winner_league_id][name][winner_index][loser_index] += loser_score * goals_multiplier
         else:
+            winner_adj_matrix = np.array(self.league_stats_by_year[season][winner_league_id][name])
+            winner_ranks = p_rank.rank(winner_adj_matrix, 2)
+            winner_rank = winner_ranks[winner_index][0]
 
-            wA = np.array(self.year_to_league_stats[season][wLeagueId][name])
-            wR = p_rank.rank(wA, 2)
-            wRank = wR[wIndex][0]
+            loser_adj_matrix = np.array(self.league_stats_by_year[season][loser_league_id][name])
+            loser_ranks = p_rank.rank(loser_adj_matrix, 2)
+            loser_rank = loser_ranks[loser_index][0]
 
-            lA = np.array(self.year_to_league_stats[season][lLeagueId][name])
-            lR = p_rank.rank(lA, 2)
-            lRank = lR[lIndex][0]
+            self.stats_by_year[season][name][loser_league_index][winner_league_index] += loser_rank * wins_multiplier
+            self.stats_by_year[season][name][loser_league_index][winner_league_index] += loser_rank * winner_score * goals_multiplier
+            self.stats_by_year[season][name][winner_league_index][loser_league_index] += winner_rank * loser_score * goals_multiplier
 
-            self.year_to_stats[season][name][lLeagueIndex][wLeagueIndex] += lRank * winsMultiplier
-            self.year_to_stats[season][name][lLeagueIndex][wLeagueIndex] += lRank * wScore * goalsMultiplier
-            self.year_to_stats[season][name][wLeagueIndex][lLeagueIndex] += wRank * lScore * goalsMultiplier
-
-    return f
-
+    return apply_update
 
 verbal = False
 
 
-def addPageRankToInputs(name):
-    def f(self, new_input, season,
-          wLeagueId, wLeagueIndex, wIndex, wScore,
-          lLeagueId, lLeagueIndex, lIndex, lScore):
+def add_page_rank_to_inputs(name):
+    def append_page_rank(self, new_input, season,
+                         winner_league_id, winner_league_index, winner_index, winner_score,
+                         loser_league_id, loser_league_index, loser_index, loser_score):
         # Winning team
-        wA = np.array(self.year_to_league_stats[season][wLeagueId][name])
-        wR = p_rank.rank(wA, 8)
-        new_input.append(wR[wIndex][0])
+        winner_adj_matrix = np.array(self.league_stats_by_year[season][winner_league_id][name])
+        winner_ranks = p_rank.rank(winner_adj_matrix, 8)
+        new_input.append(winner_ranks[winner_index][0])
 
         # Losing team
-        lA = np.array(self.year_to_league_stats[season][lLeagueId][name])
-        lR = p_rank.rank(lA, 8)
-        new_input.append(lR[lIndex][0])
+        loser_adj_matrix = np.array(self.league_stats_by_year[season][loser_league_id][name])
+        loser_ranks = p_rank.rank(loser_adj_matrix, 8)
+        new_input.append(loser_ranks[loser_index][0])
 
         # League
-        A = np.array(self.year_to_stats[season][name])
-        R = p_rank.rank(A, 2)
-        new_input.append(R[wLeagueIndex][0])
-        new_input.append(R[lLeagueIndex][0])
+        league_adj_matrix = np.array(self.stats_by_year[season][name])
+        league_ranks = p_rank.rank(league_adj_matrix, 2)
+        new_input.append(league_ranks[winner_league_index][0])
+        new_input.append(league_ranks[loser_league_index][0])
 
+    return append_page_rank
 
-    return f
+def setup_win_percent(name):
+    def initialize_win_percent(self):
+        for year in self.year_to_team_to_league:
+            self.stats_by_year[year][name] = {}
+            if year not in self.league_stats_by_year:
+                self.league_stats_by_year[year] = {}
+            for team_id in self.year_to_team_to_league[year]:
+                league_id = self.year_to_team_to_league[year][team_id]
+                team_count = len(self.league_stats_by_year[year][league_id]['index_to_team'])
+                self.league_stats_by_year[year][league_id][name] = [[] for _ in range(team_count)]
+                self.stats_by_year[year][name][league_id] = []
 
+    return initialize_win_percent
 
-# MARK: Win Percent
+def update_win_percent(name, games_to_consider=0):
+    def update(self, new_input, season,
+               winner_league_id, winner_league_index, winner_index, winner_score,
+               loser_league_id, loser_league_index, loser_index, loser_score):
+        # Update winner's stats
+        winner_stats = self.league_stats_by_year[season][winner_league_id][name][winner_index]
+        winner_stats.append(1.0)  # Win recorded as 1.0
+        self.league_stats_by_year[season][winner_league_id][name][winner_index] = winner_stats[-games_to_consider:]
 
-def setUpWinPercent(name):
-    def f(self):
-        for year in self.year_to_teamid_to_leagueid:
-            self.year_to_stats[year][name] = {}
-            if year not in self.year_to_league_stats:
-                self.year_to_league_stats[year] = {}
-            for teamId in self.year_to_teamid_to_leagueid[year]:
-                leagueId = self.year_to_teamid_to_leagueid[year][teamId]
-                self.year_to_stats[year][name][leagueId] = []
-                teamCount = len(self.year_to_league_stats[year][leagueId]['indexToTeam'])
-                self.year_to_league_stats[year][leagueId][name] = [[] for j in range(teamCount)]
+        # Update loser's stats
+        loser_stats = self.league_stats_by_year[season][loser_league_id][name][loser_index]
+        loser_stats.append(0.0)  # Loss recorded as 0.0
+        self.league_stats_by_year[season][loser_league_id][name][loser_index] = loser_stats[-games_to_consider:]
 
-    return f
+        # Update seasonal stats
+        self.stats_by_year[season][name][winner_league_id].append(1.0)
+        self.stats_by_year[season][name][loser_league_id].append(0.0)
+        self.stats_by_year[season][name][winner_league_id] = self.stats_by_year[season][name][winner_league_id][-games_to_consider:]
+        self.stats_by_year[season][name][loser_league_id] = self.stats_by_year[season][name][loser_league_id][-games_to_consider:]
 
+    return update
 
-def updateWinPercent(name, gamesUsing=0):
-    def f(self, new_input, season,
-          wLeagueId, wLeagueIndex, wIndex, wScore,
-          lLeagueId, lLeagueIndex, lIndex, lScore):
-        self.year_to_league_stats[season][wLeagueId][name][wIndex].append(1.0)
-        self.year_to_league_stats[season][wLeagueId][name][wIndex] = self.year_to_league_stats[season][wLeagueId][name][
-                                                                         wIndex][-gamesUsing:]
-        self.year_to_league_stats[season][lLeagueId][name][lIndex].append(0.0)
-        self.year_to_league_stats[season][lLeagueId][name][lIndex] = self.year_to_league_stats[season][lLeagueId][name][
-                                                                         lIndex][-gamesUsing:]
+def add_win_percent_to_inputs(name):
+    def append_win_percent(self, new_input, season,
+                           winner_league_id, winner_league_index, winner_index, winner_score,
+                           loser_league_id, loser_league_index, loser_index, loser_score):
 
-        # Season
-        self.year_to_stats[season][name][wLeagueId].append(1.0)
-        self.year_to_stats[season][name][lLeagueId].append(0.0)
-        self.year_to_stats[season][name][wLeagueId] = self.year_to_stats[season][name][wLeagueId][-gamesUsing:]
-        self.year_to_stats[season][name][lLeagueId] = self.year_to_stats[season][name][lLeagueId][-gamesUsing:]
+        # Calculate win percentage for the winner
+        winner_wins = np.array(self.league_stats_by_year[season][winner_league_id][name][winner_index]).sum()
+        winner_total = len(self.league_stats_by_year[season][winner_league_id][name][winner_index])
+        winner_win_percent = winner_wins / winner_total if winner_total != 0 else 0
 
-    return f
+        # Calculate win percentage for the loser
+        loser_wins = np.array(self.league_stats_by_year[season][loser_league_id][name][loser_index]).sum()
+        loser_total = len(self.league_stats_by_year[season][loser_league_id][name][loser_index])
+        loser_win_percent = loser_wins / loser_total if loser_total != 0 else 0
 
+        new_input.extend([winner_win_percent, loser_win_percent])
 
-def addWinPercentToInputs(name):
-    def f(self, new_input, season,
-          wLeagueId, wLeagueIndex, wIndex, wScore,
-          lLeagueId, lLeagueIndex, lIndex, lScore):
+        # Calculate seasonal win percentages
+        season_winner_wins = np.array(self.stats_by_year[season][name][winner_league_id]).sum()
+        season_winner_total = len(self.stats_by_year[season][name][winner_league_id])
+        season_winner_win_percent = season_winner_wins / season_winner_total if season_winner_total != 0 else 0
 
-        wWins = np.array(self.year_to_league_stats[season][wLeagueId][name][wIndex]).sum()
-        wTotal = len(self.year_to_league_stats[season][wLeagueId][name][wIndex])
-        if wTotal == 0:
-            wTotal = 1
+        season_loser_wins = np.array(self.stats_by_year[season][name][loser_league_id]).sum()
+        season_loser_total = len(self.stats_by_year[season][name][loser_league_id])
+        season_loser_win_percent = season_loser_wins / season_loser_total if season_loser_total != 0 else 0
 
-        lWins = np.array(self.year_to_league_stats[season][lLeagueId][name][lIndex]).sum()
-        lTotal = len(self.year_to_league_stats[season][lLeagueId][name][lIndex])
-        if lTotal == 0:
-            lTotal = 1
+        new_input.extend([season_winner_win_percent, season_loser_win_percent])
 
-        new_input.append(wWins / wTotal)
-        new_input.append(lWins / lTotal)
+    return append_win_percent
 
-        # Seasons
-
-        wWins = np.array(self.year_to_stats[season][name][wLeagueId]).sum()
-        wTotal = len(self.year_to_stats[season][name][wLeagueId])
-        if wTotal == 0:
-            wTotal = 1
-
-        lWins = np.array(self.year_to_stats[season][name][lLeagueId]).sum()
-        lTotal = len(self.year_to_stats[season][name][lLeagueId])
-        if lTotal == 0:
-            lTotal = 1
-
-        new_input.append(wWins / wTotal)
-        new_input.append(lWins / lTotal)
-
-    return f
-
-
-def addInInputsOutputs(m, data):
-    inputs, outputs = m.createInputsAndOutputs(
-        data,
+def add_inputs_and_outputs(model, dataset):
+    inputs, outputs = model.prepare_data(
+        dataset,
         [
-            setUpPageRank('PageRankWins'),
-            setUpPageRank('PageRankGoals'),
-            setUpWinPercent('Wins10'),
-            setUpWinPercent('Wins0'),
+            setup_page_rank('PageRankWins'),
+            setup_page_rank('PageRankGoals'),
+            setup_win_percent('Wins10'),
+            setup_win_percent('Wins0'),
         ],
         [
-            updatePageRank('PageRankWins', 1.0, 0.0),
-            updatePageRank('PageRankGoals', 0.0, 1.0),
-            updateWinPercent('Wins10', 10),
-            updateWinPercent('Wins0', 0),
+            update_page_rank('PageRankWins', 1.0, 0.0),
+            update_page_rank('PageRankGoals', 0.0, 1.0),
+            update_win_percent('Wins10', 10),
+            update_win_percent('Wins0', 0),
         ],
         [
-            addPageRankToInputs('PageRankWins'),
-            addPageRankToInputs('PageRankGoals'),
-            addWinPercentToInputs('Wins10'),
-            addWinPercentToInputs('Wins0'),
+            add_page_rank_to_inputs('PageRankWins'),
+            add_page_rank_to_inputs('PageRankGoals'),
+            add_win_percent_to_inputs('Wins10'),
+            add_win_percent_to_inputs('Wins0'),
         ])
 
     return inputs, outputs
 
+def get_data():
+    model = DataBuilder()
 
-def getData():
-    m = MakeData()
-
-    data = pd.read_csv('MDataFiles_Stage3/MRegularSeasonCompactResults.csv')
-    m.createInputsAndOutputs(
-        data,
+    regular_season_data = pd.read_csv('MDataFiles_Stage3/MRegularSeasonCompactResults.csv')
+    model.prepare_data(
+        regular_season_data,
         [
-            setUpPageRank('PageRankWins'),
-            setUpPageRank('PageRankGoals'),
-            setUpWinPercent('Wins10'),
-            setUpWinPercent('Wins0'),
+            setup_page_rank('PageRankWins'),
+            setup_page_rank('PageRankGoals'),
+            setup_win_percent('Wins10'),
+            setup_win_percent('Wins0'),
         ],
         [
-            updatePageRank('PageRankWins', 1.0, 0.0),
-            updatePageRank('PageRankGoals', 0.0, 1.0),
-            updateWinPercent('Wins10', 10),
-            updateWinPercent('Wins0', 0),
+            update_page_rank('PageRankWins', 1.0, 0.0),
+            update_page_rank('PageRankGoals', 0.0, 1.0),
+            update_win_percent('Wins10', 10),
+            update_win_percent('Wins0', 0),
         ],
-        [  # No need to add data when we dont use it
-            # addPageRankToInputs('PageRankWins'),
-            # addPageRankToInputs('PageRankGoals'),
-            # addWinPercentToInputs('Wins10'),
-            # addWinPercentToInputs('Wins0'),
-        ])
+        []  # No input functions used here
+    )
 
+    global verbose
+    verbose = True
 
-    global verbal
-    verbal = True
-
-    data = pd.read_csv('MDataFiles_Stage3/MNCAATourneyCompactResults.csv')
-    inputs, outputs = m.createInputsAndOutputs(
-        data,
+    tournament_data = pd.read_csv('MDataFiles_Stage3/MNCAATourneyCompactResults.csv')
+    inputs, outputs = model.prepare_data(
+        tournament_data,
         [],
         [],
         [
-            addPageRankToInputs('PageRankWins'),
-            addPageRankToInputs('PageRankGoals'),
-            addWinPercentToInputs('Wins10'),
-            addWinPercentToInputs('Wins0'),
+            add_page_rank_to_inputs('PageRankWins'),
+            add_page_rank_to_inputs('PageRankGoals'),
+            add_win_percent_to_inputs('Wins10'),
+            add_win_percent_to_inputs('Wins0'),
         ])
-
-    # training_inputs = np.array(inputs[:2117])
-    # training_outputs = np.array(outputs[:2117])
-
-    # testing_inputs = np.array(inputs[2117:])
-    # testing_outputs = np.array(outputs[2117:])
 
     training_inputs = np.array(inputs)
     training_outputs = np.array(outputs)
     testing_inputs = np.array(inputs)
     testing_outputs = np.array(outputs)
 
-    return m, training_inputs, training_outputs, testing_inputs, testing_outputs
+    return model, training_inputs, training_outputs, testing_inputs, testing_outputs
 
+def get_inputs(model, season, team1, team2):
+    data_dict = {
+        'Season': [season], 'DayNum': [155], 'WTeamID': [team1],
+        'WScore': [0], 'LTeamID': [team2], 'LScore': [0],
+        'WLoc': ['N'], 'NumOT': [0]
+    }
+    match_data = pd.DataFrame(data=data_dict)
 
-def getInputs(m, season, team1, team2):
-    d = {'Season': [season], 'DayNum': [155], 'WTeamID': [team1],
-         'WScore': [0], 'LTeamID': [team2], 'LScore': [0],
-         'WLoc': ['N'], 'NumOT': [0]}
-    data = pd.DataFrame(data=d)
-
-    inputs, _ = m.createInputsAndOutputs(
-        data, [], [], [
-            addPageRankToInputs('PageRankWins'),
-            addPageRankToInputs('PageRankGoals'),
-            addWinPercentToInputs('Wins10'),
-            addWinPercentToInputs('Wins0'),
+    inputs, _ = model.prepare_data(
+        match_data, [], [], [
+            add_page_rank_to_inputs('PageRankWins'),
+            add_page_rank_to_inputs('PageRankGoals'),
+            add_win_percent_to_inputs('Wins10'),
+            add_win_percent_to_inputs('Wins0'),
         ])
 
     return np.array(inputs)
+
 
 
 if __name__ == "__main__":

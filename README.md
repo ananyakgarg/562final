@@ -1,7 +1,7 @@
 # 562final
 
 # Overview
-This project explores the use of machine learning techniques to predict outcomes in the NCAA March Madness tournaments. By employing logistic regression and support vector machines (SVM), our models leverage historical data to forecast tournament results with notable accuracy. This README provides an overview of the project structure, usage instructions, and contributing guidelines.
+This project explores the use of machine learning techniques to predict outcomes in the NCAA March Madness tournaments. By employing logistic regression and support vector machines (SVM), our models leverage historical data to forecast tournament results with notable accuracy. 
 
 # Authors
 - Ananya Garg

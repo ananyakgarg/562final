@@ -1,135 +1,57 @@
 from sklearn import svm
-import seaborn as sns
-import matplotlib.pyplot as plt
-from joblib import dump, load
-import tensorflow as tf
-import keras
-import math
 import numpy as np
 import pandas as pd
 import data as mdata
 import make_bracket
 import byear
 
-
+import tensorflow as tf
 print(tf.version.VERSION)
 
-
-def createModel(input_len, output_len):
-    C = 200
+def initialize_svm_model(input_len, output_len):
     model = svm.SVC(kernel='rbf', probability=True)
     return model
 
+def fit_model(model, data_manager, train_inputs, train_outputs, test_inputs, test_outputs):
+    print('Shapes of Data:')
+    print('Training:', train_inputs.shape, train_outputs.shape)
+    print('Testing:', test_inputs.shape, test_outputs.shape)
 
-def train(model, m, training_inputs, training_outputs, testing_inputs, testing_outputs):
-    print('SHAPES')
-    print(training_inputs.shape, training_outputs.shape,
-          testing_inputs.shape, testing_outputs.shape)
+    model.fit(train_inputs, train_outputs.ravel())
+    print('Model training complete.')
 
-    model = model.fit(training_inputs, training_outputs.flatten())
-    print('MODEL IS FIT')
+    return data_manager, model
 
-    wTRank = []
-    lTRank = []
-    wLRank = []
-    lLRank = []
-    wGTRank = []
-    lGTRank = []
-    wGLRank = []
-    lGLRank = []
-    wTWinTen = []
-    lTWinTen = []
-    wSWinTen = []
-    lSWinTen = []
-    wTWinZero = []
-    lTWinZero = []
-    wSWinZero = []
-    lSWinZero = []
-    didWin = []
+def generate_game_predictor(data_manager, model, year):
+    def game_predictor(team1, team2):
+        inputs = mdata.get_inputs(data_manager, year, team1, team2)
+        probabilities = model.predict_proba(inputs)
+        return probabilities[0][1] / sum(probabilities[0])
+    return game_predictor
 
-    for i in range(0):
-        index = 0
-        wTWinTen.append(training_inputs[i][index])
-        index += 1
-        lTWinTen.append(training_inputs[i][index])
-        index += 1
-        wSWinTen.append(training_inputs[i][index])
-        index += 1
-        lSWinTen.append(training_inputs[i][index])
-        index += 1
-        wTWinZero.append(training_inputs[i][index])
-        index += 1
-        lTWinZero.append(training_inputs[i][index])
-        index += 1
-        wSWinZero.append(training_inputs[i][index])
-        index += 1
-        lSWinZero.append(training_inputs[i][index])
-        index += 1
-        didWin.append(training_outputs[i][0])
-        index += 1
+def convert_team_id_to_name(data_manager):
+    def converter(team_id):
+        return data_manager.team_id_to_name.get(team_id, f'{team_id}-unknown')
+    return converter
 
-    return m, model
-
-
-def predGame(m, model, year):
-    def predict(team1, team2):
-        inputs = mdata.getInputs(m, year, team1, team2)
-
-        won = model.predict_proba(inputs)[0][1]
-        los = model.predict_proba(inputs)[0][0]
-        prob = won / (won + los)
-        return prob
-        
-    return predict
-
-
-def team_to_str(m):
-    def convert(teamId):
-        if teamId in m.teamid_to_teamname:
-            return m.teamid_to_teamname[teamId]
-        return teamId + '-unknown'
-    return convert
-
-
-def testing(training_inputs, training_outputs, transform):
-    correct = 0
-    wrong = 0
-
-    for i in range(len(training_inputs)):
-        h = transform(training_inputs[i][0], training_inputs[i][2])
-        a = transform(training_inputs[i][1], training_inputs[i][3])
-
-        if h > a and training_outputs[i][0] == 1 or h < a and training_outputs[i][0] == 0:
-            correct += 1
+def validate_predictions(input_data, output_data, comparison_func):
+    correct_count, error_count = 0, 0
+    for i in range(len(input_data)):
+        home = comparison_func(input_data[i][0], input_data[i][2])
+        away = comparison_func(input_data[i][1], input_data[i][3])
+        if (home > away and output_data[i][0] == 1) or (home < away and output_data[i][0] == 0):
+            correct_count += 1
         else:
-            wrong += 1
-
-    return correct, wrong
-
+            error_count += 1
+    return correct_count, error_count
 
 if __name__ == "__main__":
-    m, training_inputs, training_outputs, test_inputs, test_outputs = mdata.getData()
-    print(m)
-    print(training_inputs.shape[1])
-    print(training_outputs.shape[1])
-    model = createModel(training_inputs.shape[1], training_outputs.shape[1])
+    data_manager, train_inputs, train_outputs, test_inputs, test_outputs = mdata.get_data()
+    svm_model = initialize_svm_model(train_inputs.shape[1], train_outputs.shape[1])
+    _, svm_model = fit_model(svm_model, data_manager, train_inputs, train_outputs, test_inputs, test_outputs)
 
-    _, model = train(model, m, training_inputs, training_outputs, test_inputs, test_outputs)
-
-
-    b = make_bracket.Bracket(byear.the2016Bracket, predGame(m, model, 2016), team_to_str(m))
-    b.tournament()
-    b = make_bracket.Bracket(byear.the2018Bracket, predGame(m, model, 2018), team_to_str(m))
-    b.tournament()
-    b = make_bracket.Bracket(byear.the2019Bracket, predGame(m, model, 2019), team_to_str(m))
-    b.tournament()
-
-    b = make_bracket.Bracket(byear.the2021Bracket, predGame(m, model, 2021), team_to_str(m))
-    b.tournament()
-
-    b = make_bracket.Bracket(byear.the2021SecondChanceBracket, predGame(m, model, 2021), team_to_str(m))
-    b.tournament()
-
-    b = make_bracket.Bracket(byear.the2022Bracket, predGame(m, model, 2022), team_to_str(m))
-    b.tournament()
-
+    for year in [2016, 2018, 2019, 2021, 2022]:
+        bracket_predictor = generate_game_predictor(data_manager, svm_model, year)
+        team_namer = convert_team_id_to_name(data_manager)
+        tournament_bracket = make_bracket.Bracket(byear.__dict__[f'the{year}Bracket'], bracket_predictor, team_namer)
+        tournament_bracket.tournament()

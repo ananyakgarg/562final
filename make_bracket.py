@@ -1,62 +1,54 @@
 import random
 
-class Bracket:
+class TournamentSimulator:
 
-    def __init__(self, teams, getProbs, team_to_str):
-        self.teams = [(teams[i], 1.0) for i in range(len(teams))]
-        self.getProbs = getProbs
-        self.team_to_str = team_to_str
+    def __init__(self, participants, calculate_odds, participant_to_string):
+        self.participants = [(participants[i], 1.0) for i in range(len(participants))]
+        self.calculate_odds = calculate_odds
+        self.participant_to_string = participant_to_string
 
-    def play_round(self):
-        newTeams = []
-        for i in range(len(self.teams)//2):
-            prob1 = self.getProbs(self.teams[i*2][0], self.teams[i*2+1][0])
-            prob2 = 1.0 - self.getProbs(self.teams[i*2+1][0],
-                    self.teams[i*2][0])
-            prob = (prob1 + prob2) / 2.0
+    def play_match(self):
+        next_round_participants = []
+        for i in range(len(self.participants) // 2):
+            odds_team1 = self.calculate_odds(self.participants[i*2][0], self.participants[i*2+1][0])
+            odds_team2 = 1.0 - self.calculate_odds(self.participants[i*2+1][0], self.participants[i*2][0])
+            average_odds = (odds_team1 + odds_team2) / 2.0
 
-            prob1 = prob * self.teams[i*2][1]
-            prob2 = (1.0-prob) * self.teams[i*2+1][1]
+            adjusted_odds_team1 = average_odds * self.participants[i*2][1]
+            adjusted_odds_team2 = (1.0 - average_odds) * self.participants[i*2+1][1]
 
-            prob = prob1 / (prob1 + prob2)
+            selection_probability = adjusted_odds_team1 / (adjusted_odds_team1 + adjusted_odds_team2)
 
-            #rand = random.random() * random.random() * (1.0 if random.random() > 0.5 else -1.0) / 2 + 0.5
-            if prob > 0.5:
-            #if rand < prob:
-                newTeams.append((self.teams[i*2][0], prob1))
+            if selection_probability > 0.5:
+                next_round_participants.append((self.participants[i*2][0], adjusted_odds_team1))
             else:
-                newTeams.append((self.teams[i*2+1][0], prob2))
+                next_round_participants.append((self.participants[i*2+1][0], adjusted_odds_team2))
 
-        self.teams = newTeams
+        self.participants = next_round_participants
 
-    def tournament(self):
-        print('FIRST ROUND ', len(self.teams))
+    def conduct_tournament(self):
+        print('INITIAL ROUND: ', len(self.participants))
         print(self)
-        while len(self.teams) > 1:
-            self.play_round()
-            print("PLAYING ROUND: ", len(self.teams))
+        while len(self.participants) > 1:
+            self.play_match()
+            print("NEXT ROUND: ", len(self.participants))
             print(self)
 
-        print("Winner: ", self.team_to_str(self.teams[0][0]),
-                "%.3f" % (self.teams[0][1]))
+        print("Champion: ", self.participant_to_string(self.participants[0][0]), "%.3f" % (self.participants[0][1]))
 
     def __str__(self):
-        s = ''
+        result_str = ''
+        for i in range(len(self.participants) // 2):
+            name_team1 = self.participant_to_string(self.participants[i*2][0])
+            name_team2 = self.participant_to_string(self.participants[i*2+1][0])
 
-        for i in range(len(self.teams) // 2):
-            team1 = self.team_to_str(self.teams[i*2][0])
-            team2 = self.team_to_str(self.teams[i*2+1][0])
+            odds_team1 = self.participants[i*2][1]
+            odds_team2 = self.participants[i*2+1][1]
 
-            prob1 = self.teams[i*2][1]
-            prob2 = self.teams[i*2+1][1]
+            current_odds_team1 = self.calculate_odds(self.participants[i*2][0], self.participants[i*2+1][0])
+            current_odds_team2 = 1.0 - self.calculate_odds(self.participants[i*2+1][0], self.participants[i*2][0])
+            match_odds = (current_odds_team1 + current_odds_team2) / 2.0
 
-            cprob1 = self.getProbs(self.teams[i*2][0], self.teams[i*2+1][0])
-            cprob2 = 1.0 - self.getProbs(self.teams[i*2+1][0],
-                    self.teams[i*2][0])
-            cprob = (cprob1 + cprob2) / 2.0
+            result_str += '%20s %5.2f vs %-5.2f %-20s\t\t%.2f\n' % (name_team1, odds_team1, odds_team2, name_team2, match_odds)
 
-            s += '%20s %5.2f vs %-5.2f %-20s\t\t%.2f\n' % (team1,
-                    prob1, prob2, team2, cprob)
-
-
-        return s
+        return result_str
